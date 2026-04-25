@@ -1,4 +1,4 @@
-"""Entry point for the MCP server."""
+"""Entry point for running the MCP server as a module."""
 
 import asyncio
 import sys

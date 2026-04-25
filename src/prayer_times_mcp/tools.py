@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Annotated, Optional
 
 from mcp.server import Server
+from mcp.types import Tool
 from pydantic import BaseModel
 
 from .client import AladhanClient
@@ -37,25 +38,17 @@ def create_app() -> Server:
     # Initialize client
     client = AladhanClient()
 
+    # Register all tool handlers
     @app.call_tool()
-    async def get_prayer_times(
-        city_name: Annotated[str, "City name (e.g., London, New York, Karachi)"],
-        country: Annotated[str, "Country name or code (e.g., UK, US, Pakistan)"],
-        method: Annotated[int, "Calculation method (1-12). Default: 5 (Karachi)"] = 5,
-    ) -> str:
-        """
-        Get prayer times for a specific city and date.
-
-        Use this when user asks for:
-        - Prayer times for a city
-        - Fajr, Dhuhr, Asr, Maghrib, Isha times
-        - Today's prayer schedule
-
-        Returns all 5 daily prayer times with date and location info.
-        """
+    async def get_prayer_times(tool_name: str, arguments: dict) -> str:
+        """Get prayer times for a specific city and date."""
         try:
+            city = arguments.get("city_name", arguments.get("city", ""))
+            country = arguments.get("country", "")
+            method = arguments.get("method", 5)
+
             result = await client.get_prayer_times(
-                city=city_name,
+                city=city,
                 country=country,
                 method=method,
             )
@@ -64,7 +57,7 @@ def create_app() -> Server:
                 return json.dumps({
                     "success": False,
                     "error": result.get("message", "API error"),
-                    "city": city_name,
+                    "city": city,
                     "country": country,
                 })
 
@@ -82,7 +75,7 @@ def create_app() -> Server:
                 "success": True,
                 "date": data.get("date", {}).get("readable", now.strftime("%Y-%m-%d")),
                 "hijri_date": data.get("date", {}).get("hijri", {}).get("date", "Unknown"),
-                "city": city_name,
+                "city": city,
                 "country": country,
                 "method": method,
                 "prayer_times": {
@@ -103,30 +96,20 @@ def create_app() -> Server:
             return json.dumps({
                 "success": False,
                 "error": str(e),
-                "city": city_name,
-                "country": country,
+                "city": arguments.get("city_name", arguments.get("city", "")),
+                "country": arguments.get("country", ""),
             })
 
     @app.call_tool()
-    async def get_next_prayer(
-        city_name: Annotated[str, "City name"],
-        country: Annotated[str, "Country name or code"],
-        method: Annotated[int, "Calculation method. Default: 5"] = 5,
-    ) -> str:
-        """
-        Get the next prayer time and countdown.
-
-        Use this when user asks:
-        - "What's the next prayer?"
-        - "When is the next prayer?"
-        - "Countdown to prayer"
-        - "How long until next prayer?"
-
-        Returns next prayer name, time, and minutes remaining.
-        """
+    async def get_next_prayer(tool_name: str, arguments: dict) -> str:
+        """Get the next prayer time and countdown."""
         try:
+            city = arguments.get("city_name", arguments.get("city", ""))
+            country = arguments.get("country", "")
+            method = arguments.get("method", 5)
+
             result = await client.get_prayer_times(
-                city=city_name,
+                city=city,
                 country=country,
                 method=method,
             )
@@ -164,7 +147,7 @@ def create_app() -> Server:
                 "hours_remaining": minutes_remaining // 60,
                 "message": f"{next_prayer} in {time_str}",
                 "date": date_info.get("readable", now.strftime("%Y-%m-%d")),
-                "city": city_name,
+                "city": city,
                 "country": country,
             }
 
@@ -177,24 +160,14 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def get_qibla_direction(
-        city_name: Annotated[str, "City name"],
-        country: Annotated[str, "Country name or code"],
-    ) -> str:
-        """
-        Get Qibla direction from a city.
-
-        Use this when user asks:
-        - "Which way is Qibla?"
-        - "Qibla direction"
-        - "Where is Kaaba?"
-        - "How to face Qibla?"
-
-        Returns degrees, compass direction, and human-readable guides.
-        """
+    async def get_qibla_direction(tool_name: str, arguments: dict) -> str:
+        """Get Qibla direction from a city."""
         try:
+            city = arguments.get("city_name", arguments.get("city", ""))
+            country = arguments.get("country", "")
+
             result = await client.get_qibla(
-                city=city_name,
+                city=city,
                 country=country,
             )
 
@@ -215,7 +188,7 @@ def create_app() -> Server:
 
             response = {
                 "success": True,
-                "city": city_name,
+                "city": city,
                 "country": country,
                 "coordinates": {
                     "latitude": coordinates.get("latitude", 0),
@@ -238,24 +211,14 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def get_hijri_date(
-        gregorian_date: Annotated[Optional[str], "Gregorian date in YYYY-MM-DD format. Default: today"] = None,
-        city_name: Annotated[Optional[str], "City name for location-based calculation"] = None,
-        country: Annotated[Optional[str], "Country name"] = None,
-        method: Annotated[int, "Calculation method. Default: 5"] = 5,
-    ) -> str:
-        """
-        Get Hijri (Islamic) date for a Gregorian date.
-
-        Use this when user asks:
-        - "What's the Hijri date?"
-        - "Islamic date today?"
-        - "Convert Gregorian to Hijri"
-        - "What date is [specific date] in Islamic calendar?"
-
-        Returns Hijri day, month name, and year.
-        """
+    async def get_hijri_date(tool_name: str, arguments: dict) -> str:
+        """Get Hijri (Islamic) date for a Gregorian date."""
         try:
+            gregorian_date = arguments.get("gregorian_date")
+            city = arguments.get("city_name")
+            country = arguments.get("country")
+            method = arguments.get("method", 5)
+
             # Use today's date if not specified
             if not gregorian_date:
                 gregorian_date = datetime.now().strftime("%Y-%m-%d")
@@ -304,8 +267,8 @@ def create_app() -> Server:
                 "special_note": special_note,
             }
 
-            if city_name and country:
-                response["city"] = city_name
+            if city and country:
+                response["city"] = city
                 response["country"] = country
 
             return json.dumps(response, indent=2)
@@ -317,27 +280,17 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def get_monthly_calendar(
-        city_name: Annotated[str, "City name"],
-        country: Annotated[str, "Country name or code"],
-        month: Annotated[int, "Month (1-12)"],
-        year: Annotated[int, "Year (e.g., 2026)"],
-        method: Annotated[int, "Calculation method. Default: 5"] = 5,
-    ) -> str:
-        """
-        Get full month prayer schedule.
-
-        Use this when user asks:
-        - "Monthly prayer schedule"
-        - "Prayer times for April"
-        - "Full month calendar"
-        - "All prayer times this month"
-
-        Returns array of days with all prayer times.
-        """
+    async def get_monthly_calendar(tool_name: str, arguments: dict) -> str:
+        """Get full month prayer schedule."""
         try:
+            city = arguments.get("city_name", arguments.get("city", ""))
+            country = arguments.get("country", "")
+            month = arguments.get("month")
+            year = arguments.get("year")
+            method = arguments.get("method", 5)
+
             result = await client.get_calendar(
-                city=city_name,
+                city=city,
                 country=country,
                 month=month,
                 year=year,
@@ -373,7 +326,7 @@ def create_app() -> Server:
 
             response = {
                 "success": True,
-                "city": city_name,
+                "city": city,
                 "country": country,
                 "month": month,
                 "year": year,
@@ -390,25 +343,14 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def get_ramadan_times(
-        city_name: Annotated[str, "City name"],
-        country: Annotated[str, "Country name or code"],
-        year: Annotated[Optional[int], "Year. Default: current year"] = None,
-        method: Annotated[int, "Calculation method. Default: 5"] = 5,
-    ) -> str:
-        """
-        Get Ramadan sehri and iftar times.
-
-        Use this when user asks:
-        - "Ramadan times"
-        - "Sehri and Iftar"
-        - "Days remaining in Ramadan"
-        - "Ramadan schedule"
-
-        Returns today's sehri/iftar times and days remaining.
-        If not Ramadan, returns days until Ramadan.
-        """
+    async def get_ramadan_times(tool_name: str, arguments: dict) -> str:
+        """Get Ramadan sehri and iftar times."""
         try:
+            city = arguments.get("city_name", arguments.get("city", ""))
+            country = arguments.get("country", "")
+            year = arguments.get("year")
+            method = arguments.get("method", 5)
+
             if not year:
                 year = datetime.now().year
 
@@ -417,8 +359,6 @@ def create_app() -> Server:
             current_month = now.month  # Gregorian month
 
             # Estimate Ramadan dates (month 9 in Islamic calendar)
-            # Ramadan typically shifts ~10-11 days earlier each Gregorian year
-            # This is a simplified estimation
             ramadan_start = datetime(year, 3, 10)  # Approximate start
             ramadan_end = datetime(year, 4, 9)  # Approximate end
 
@@ -427,7 +367,7 @@ def create_app() -> Server:
             if is_ramadan:
                 # Get today's prayer times for Ramadan
                 result = await client.get_prayer_times(
-                    city=city_name,
+                    city=city,
                     country=country,
                     method=method,
                 )
@@ -454,7 +394,7 @@ def create_app() -> Server:
                     "days_remaining": total_days - days_elapsed,
                     "todays_sehri": timings.get("Fajr", "Unknown"),
                     "todays_iftar": timings.get("Maghrib", "Unknown"),
-                    "city": city_name,
+                    "city": city,
                     "country": country,
                 }
             else:
@@ -474,7 +414,7 @@ def create_app() -> Server:
                     "days_until_ramadan": days_until,
                     "estimated_start": next_ramadan.strftime("%Y-%m-%d"),
                     "estimated_end": (next_ramadan.replace(day=next_ramadan.day + 29)).strftime("%Y-%m-%d"),
-                    "city": city_name,
+                    "city": city,
                     "country": country,
                 }
 
@@ -487,22 +427,10 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def get_islamic_events(
-        year: Annotated[Optional[int], "Year. Default: current year"] = None,
-    ) -> str:
-        """
-        Get upcoming Islamic events.
-
-        Use this when user asks:
-        - "Islamic events"
-        - "Eid dates"
-        - "Shab-e-Qadr"
-        - "Islamic holidays"
-        - "Upcoming religious events"
-
-        Returns Eid ul Fitr, Eid ul Adha, Shab-e-Qadr, Islamic New Year, Prophet Birthday.
-        """
+    async def get_islamic_events(tool_name: str, arguments: dict) -> str:
+        """Get upcoming Islamic events."""
         try:
+            year = arguments.get("year")
             if not year:
                 year = datetime.now().year
 
@@ -546,25 +474,15 @@ def create_app() -> Server:
             })
 
     @app.call_tool()
-    async def compare_prayer_times(
-        city1: Annotated[str, "First city name"],
-        country1: Annotated[str, "First country"],
-        city2: Annotated[str, "Second city name"],
-        country2: Annotated[str, "Second country"],
-        method: Annotated[int, "Calculation method. Default: 5"] = 5,
-    ) -> str:
-        """
-        Compare prayer times between two cities.
-
-        Use this when user asks:
-        - "Compare prayer times"
-        - "London vs Manchester"
-        - "Side by side prayer times"
-        - "Difference between cities"
-
-        Returns side by side comparison with minute differences.
-        """
+    async def compare_prayer_times(tool_name: str, arguments: dict) -> str:
+        """Compare prayer times between two cities."""
         try:
+            city1 = arguments.get("city1", arguments.get("city_name", ""))
+            country1 = arguments.get("country1", arguments.get("country", ""))
+            city2 = arguments.get("city2", "")
+            country2 = arguments.get("country2", "")
+            method = arguments.get("method", 5)
+
             # Get prayer times for city 1
             result1 = await client.get_prayer_times(
                 city=city1,
@@ -654,5 +572,119 @@ def create_app() -> Server:
                 "success": False,
                 "error": str(e),
             })
+
+    # Register tool definitions using list_tools decorator
+    @app.list_tools()
+    async def list_tools() -> list[Tool]:
+        """List all available tools."""
+        return [
+            Tool(
+                name="get_prayer_times",
+                description="Get prayer times for a specific city and date. Use this when user asks for prayer times for a city, Fajr/Dhuhr/Asr/Maghrib/Isha times, or today's prayer schedule.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city_name": {"type": "string", "description": "City name (e.g., London, New York, Karachi)"},
+                        "country": {"type": "string", "description": "Country name or code (e.g., UK, US, Pakistan)"},
+                        "method": {"type": "integer", "description": "Calculation method (1-12). Default: 5 (Karachi)"}
+                    },
+                    "required": ["city_name", "country"]
+                }
+            ),
+            Tool(
+                name="get_next_prayer",
+                description="Get the next prayer time and countdown. Use this when user asks 'what is the next prayer', 'when is the next prayer', 'countdown to prayer', or 'how long until next prayer'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city_name": {"type": "string", "description": "City name"},
+                        "country": {"type": "string", "description": "Country name or code"},
+                        "method": {"type": "integer", "description": "Calculation method. Default: 5"}
+                    },
+                    "required": ["city_name", "country"]
+                }
+            ),
+            Tool(
+                name="get_qibla_direction",
+                description="Get Qibla direction from a city. Use this when user asks 'which way is Qibla', 'Qibla direction', 'where is Kaaba', or 'how to face Qibla'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city_name": {"type": "string", "description": "City name"},
+                        "country": {"type": "string", "description": "Country name or code"}
+                    },
+                    "required": ["city_name", "country"]
+                }
+            ),
+            Tool(
+                name="get_hijri_date",
+                description="Get Hijri (Islamic) date for a Gregorian date. Use this when user asks 'what is the Hijri date', 'Islamic date today', 'convert Gregorian to Hijri', or 'what date is [specific date] in Islamic calendar'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "gregorian_date": {"type": "string", "description": "Gregorian date in YYYY-MM-DD format. Default: today"},
+                        "city_name": {"type": "string", "description": "City name for location-based calculation"},
+                        "country": {"type": "string", "description": "Country name"},
+                        "method": {"type": "integer", "description": "Calculation method. Default: 5"}
+                    },
+                    "required": []
+                }
+            ),
+            Tool(
+                name="get_monthly_calendar",
+                description="Get full month prayer schedule. Use this when user asks for 'monthly prayer schedule', 'prayer times for April', 'full month calendar', or 'all prayer times this month'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city_name": {"type": "string", "description": "City name"},
+                        "country": {"type": "string", "description": "Country name or code"},
+                        "month": {"type": "integer", "description": "Month (1-12)"},
+                        "year": {"type": "integer", "description": "Year (e.g., 2026)"},
+                        "method": {"type": "integer", "description": "Calculation method. Default: 5"}
+                    },
+                    "required": ["city_name", "country", "month", "year"]
+                }
+            ),
+            Tool(
+                name="get_ramadan_times",
+                description="Get Ramadan sehri and iftar times. Use this when user asks about 'Ramadan times', 'Sehri and Iftar', 'days remaining in Ramadan', or 'Ramadan schedule'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city_name": {"type": "string", "description": "City name"},
+                        "country": {"type": "string", "description": "Country name or code"},
+                        "year": {"type": "integer", "description": "Year. Default: current year"},
+                        "method": {"type": "integer", "description": "Calculation method. Default: 5"}
+                    },
+                    "required": ["city_name", "country"]
+                }
+            ),
+            Tool(
+                name="get_islamic_events",
+                description="Get upcoming Islamic events. Use this when user asks about 'Islamic events', 'Eid dates', 'Shab-e-Qadr', 'Islamic holidays', or 'upcoming religious events'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "year": {"type": "integer", "description": "Year. Default: current year"}
+                    },
+                    "required": []
+                }
+            ),
+            Tool(
+                name="compare_prayer_times",
+                description="Compare prayer times between two cities. Use this when user asks to 'compare prayer times', 'London vs Manchester', 'side by side prayer times', or 'difference between cities'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "city1": {"type": "string", "description": "First city name"},
+                        "country1": {"type": "string", "description": "First country"},
+                        "city2": {"type": "string", "description": "Second city name"},
+                        "country2": {"type": "string", "description": "Second country"},
+                        "method": {"type": "integer", "description": "Calculation method. Default: 5"}
+                    },
+                    "required": ["city1", "country1", "city2", "country2"]
+                }
+            ),
+        ]
 
     return app
