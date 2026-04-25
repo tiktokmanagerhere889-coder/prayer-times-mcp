@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv add *)",
+      "Bash(uv run *)",
+      "Bash(uv pip *)",
+      "Bash(curl -s \"https://api.aladhan.com/v1/timings/25-04-2026?latitude=51.5074&longitude=-0.1278&method=5\")",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('data', {}\\).get\\('date', {}\\), indent=2\\)\\)\")"
+    ]
+  }
+}
